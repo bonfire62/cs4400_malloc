@@ -119,17 +119,23 @@ void extend(size_t new_size) {
 
   //update list_node
   list_node *list = page_pointer;
+  PUT(page_pointer, list);
   //check if free page the first
   if(free_list != NULL)
   {
 		if(((list_node *)free_list)->prev == NULL){
 		list->next = free_list;
-		((list_node *)free_list)->prev= list;
-		PUT(page_pointer, list);
+		free_list = list;
 		}
   }
+  else
+  {
+	  list->prev = NULL;
+	  list->next = NULL;
+
+  }
   //update head pointer
-  PUT(page_pointer, list);
+
   // TODO currently stamping data, need to append pointer
   free_list = list;
 
@@ -151,8 +157,11 @@ void set_allocated(void *bp, size_t size){
 	  if(free_size <= OVERHEAD)
 	  {
 		  //extend?
-	  }
+		  extend(mem_pagesize());
 
+	  }
+	  int x;
+	  x = OVERHEAD;
 	  //mark header and footer as allocated
 	  void* new_footer = (char *)bp + size - OVERHEAD;
 	  void* new_header = (char *)new_footer + sizeof(block_footer);
@@ -174,11 +183,18 @@ void set_allocated(void *bp, size_t size){
 	  //we need to set the used free space to nothing, and reinitialize the free_size to the new free space
 
 	  //if at end of list
-	  void* node_pointer = new_header + (OVERHEAD - sizeof(block_footer));
+	  void* node_pointer = (char *)new_header + sizeof(block_header);
 	  list_node *new_node = node_pointer;
-	  free_list = node_pointer;
-	  new_node->next = n;
-	  new_node->prev = new_node;
+	  list_node *old_node = free_list;
+	  if(bp == old_node)
+	  {
+		  new_node->next = old_node->next;
+		  new_node->prev = old_node->prev;
+		  free_list = new_node;
+	  }
+
+
+
 
 
 }
@@ -254,6 +270,12 @@ void *mm_malloc(size_t size) {
 
   //first fit
   while(GET_SIZE(HDRP(bp)) != 0)  {
+	  //for debugging
+	  int x;
+	  x = GET_ALLOC(HDRP(bp));
+	  int z;
+	  z = GET_SIZE(HDRP(bp));
+	  //
     if(!GET_ALLOC(HDRP(bp)) && (GET_SIZE(HDRP(bp)) >= new_size)){
       set_allocated(bp, new_size);
       return bp;
@@ -275,13 +297,15 @@ void *mm_malloc(size_t size) {
 
 
 
-
 /*
  * mm_free - Freeing a block does nothing.
  */
 void mm_free(void *bp)
 {
-  PUT(bp, PACK(GET_SIZE(HDRP(bp)),0));
+	//TODO not reallocating correctly
+	int free_size = GET_SIZE(bp);
+	PUT(bp, PACK(free_size, 0));
+	PUT(FTRP(bp), PACK(free_size, 0));
 
   //look at
 
@@ -296,7 +320,7 @@ void mm_free(void *bp)
 	  new_node->prev = old_node->prev; // sets new node to point to previous
   	  old_node->prev->next = new_node; // sets previous to point back to new node
   }
-  else if(old_node == NULL)
+  else if(old_node->prev == NULL)
   {
 	  new_node->prev = NULL;
   }
