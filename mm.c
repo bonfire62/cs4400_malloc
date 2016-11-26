@@ -49,9 +49,7 @@
 #define NEXT_BLKP(bp) ((char *)(bp) + GET_SIZE(HDRP(bp)))
 #define PREV_BLKP(bp) ((char *)(bp) - GET_SIZE((char *)(bp) - OVERHEAD))
 
-
 #define CHUNK_ALIGN(size) (((size) + (CHUNK_SIZE-1)) & ~(CHUNK_SIZE - 1))
-
 
 //cast generic poiter to size t
 #define GET(p) (*(size_t *)(p))
@@ -127,11 +125,13 @@ void extend(size_t new_size) {
 		if(((list_node *)free_list)->prev == NULL){
 		list->next = free_list;
 		((list_node *)free_list)->prev= list;
+		PUT(page_pointer, list);
 		}
   }
   //update head pointer
+  PUT(page_pointer, list);
+  // TODO currently stamping data, need to append pointer
   free_list = list;
-
 
   //move page pointer to page terminator
   page_pointer = (char *)page_pointer + free_space;
@@ -147,33 +147,46 @@ void set_allocated(void *bp, size_t size){
 
 	  size_t free_size = GET_SIZE(HDRP(bp)) - size;
 
+	  //check if there is enough free space for a overhead plus free space
+	  if(free_size <= OVERHEAD)
+	  {
+		  //extend?
+	  }
+
 	  //mark header and footer as allocated
 	  void* new_footer = (char *)bp + size - OVERHEAD;
 	  void* new_header = (char *)new_footer + sizeof(block_footer);
 	  PUT(HDRP(bp), PACK(size, 1));
 	  PUT(new_footer, PACK(size, 0));
 
+	  //TODO possibly missing update to block payload
+
 	  //update header and footer of free space
 	  PUT(new_header, PACK(free_size, 0));
 	  PUT(FTRP(bp), PACK(free_size, 0));
 
-	  //update free space list pointer
+
 	  list_node *n = ((list_node*)bp)->next;
 	  list_node *p = ((list_node*)bp)->prev;
 
-	  if(n != NULL){
-	    n->prev = p;
-	  }
+	  //update free space list pointer
+	  //first check if previous does not equal null
+	  //we need to set the used free space to nothing, and reinitialize the free_size to the new free space
 
-	  if(p != NULL){
-	    p->next = n;
-	  }
+	  //if at end of list
+	  void* node_pointer = new_header + (OVERHEAD - sizeof(block_footer));
+	  list_node *new_node = node_pointer;
+	  free_list = node_pointer;
+	  new_node->next = n;
+	  new_node->prev = new_node;
 
 
 }
 
 
 void *coalesce(void *bp) {
+
+	//TODO check either direction. if 0, set that
   /* size_t prev_alloc = GET_ALLOC(HDRP(PREV_BLKP(bp)));
   size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
   size_t size = GET_SIZE(HDRP(bp));
@@ -225,7 +238,6 @@ int mm_init(void) {
   //allocate initial heap area
   extend(mem_pagesize());
 
-
   return 0;
 }
 
@@ -270,7 +282,27 @@ void *mm_malloc(size_t size) {
 void mm_free(void *bp)
 {
   PUT(bp, PACK(GET_SIZE(HDRP(bp)),0));
-  //coalesce(bp);
+
+  //look at
+
+  list_node *new_node;
+  new_node = (bp);
+  list_node *old_node;
+  old_node = free_list;
+  //account for previous values
+  //inserts the new node in between if in the middle of list
+  if(old_node->prev != NULL)
+  {
+	  new_node->prev = old_node->prev; // sets new node to point to previous
+  	  old_node->prev->next = new_node; // sets previous to point back to new node
+  }
+  else if(old_node == NULL)
+  {
+	  new_node->prev = NULL;
+  }
+  new_node->next = old_node;
+  old_node->prev = new_node;
+  free_list = new_node;
 }
 
 
