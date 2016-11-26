@@ -63,12 +63,10 @@
 
 #define NEXT_FREE (((list_node *)free_list)->next)
 
-
-void *current_avail = NULL;
-int current_avail_size = 0;
 void extend(size_t new_size);
 void set_allocated(void *bp, size_t size);
 void *coalesce(void *bp);
+void *temp_pointer;
 
 
 //pointer to list of free mem
@@ -127,8 +125,8 @@ void extend(size_t new_size) {
   if(free_list != NULL)
   {
 		if(((list_node *)free_list)->prev == NULL){
-		list->next = free_list;
-		free_list = list;
+			 list->next = free_list;
+			 ((list_node *)free_list)->prev = list;
 		}
   }
   else
@@ -154,52 +152,67 @@ void extend(size_t new_size) {
 //also does work of splitting
 void set_allocated(void *bp, size_t size){
 
-	  size_t free_size = GET_SIZE(HDRP(bp)) - size;
+	size_t free_size = GET_SIZE(HDRP(bp)) - size;
 
-	  //check if there is enough free space for a overhead plus free space
-	  if(free_size <= OVERHEAD)
-	  {
-		  //extend?
-		  extend(mem_pagesize());
+	//check if there is not enough free space for a overhead plus free space
+	if(free_size <= (OVERHEAD + sizeof(list_node)))
+	{
+		//mark header and footer as allocated
+		PUT(HDRP(bp), PACK(size, 1));
+		PUT(FTRP(bp), PACK(size, 0));
 
-	  }
-	  int x;
-	  x = OVERHEAD;
-	  //mark header and footer as allocated
-	  void* new_footer = (char *)bp + size - OVERHEAD;
-	  void* new_header = (char *)new_footer + sizeof(block_footer);
-	  PUT(HDRP(bp), PACK(size, 1));
-	  PUT(new_footer, PACK(size, 0));
+		//update free space list pointer
+		list_node *n = ((list_node*)bp)->next;
+		list_node *p = ((list_node*)bp)->prev;
+
+		if(n != NULL){
+			n->prev = p;
+		}
+
+		if(p != NULL){
+			p->next = n;
+		}
+
+		if(bp == free_list){
+			if(((list_node *)bp)->next != NULL){
+				free_list = ((list_node *)bp)->next;
+			}
+			else{
+				free_list = NULL;
+			}
+		}
+		temp_pointer = bp;
+	}
+	else{
+		int x;
+		x = OVERHEAD;
+		//mark header and footer as allocated
+		void* new_footer = (char *)bp + size - OVERHEAD;
+		void* new_header = (char *)new_footer + sizeof(block_footer);
+		PUT(HDRP(bp), PACK(size, 1));
+		PUT(new_footer, PACK(size, 0));
+
+		//update header and footer of free space
+		PUT(new_header, PACK(free_size, 0));
+		PUT(FTRP(bp), PACK(free_size, 0));
 
 
-	  //update header and footer of free space
-	  PUT(new_header, PACK(free_size, 0));
-	  PUT(FTRP(bp), PACK(free_size, 0));
+		//if at end of list
+		void* node_pointer = (char *)new_header + sizeof(block_header);
+		list_node *new_node = node_pointer;
+		list_node *old_node = bp;
 
+		new_node->next = old_node->next;
+		new_node->prev = old_node->prev;
 
-	  list_node *n = ((list_node*)bp)->next;
-	  list_node *p = ((list_node*)bp)->prev;
-
-	  //update free space list pointer
-	  //first check if previous does not equal null
-	  //we need to set the used free space to nothing, and reinitialize the free_size to the new free space
-
-	  //if at end of list
-	  void* node_pointer = (char *)new_header + sizeof(block_header);
-	  list_node *new_node = node_pointer;
-	  list_node *old_node = free_list;
-	  if(bp == old_node)
-	  {
-		  new_node->next = old_node->next;
-		  new_node->prev = old_node->prev;
-		  free_list = new_node;
-	  }
-
-
-
-
-
+		if(bp == free_list){
+			free_list = new_node;
+		}
+		temp_pointer = bp;
+	}
 }
+
+
 
 
 void *coalesce(void *bp) {
@@ -282,7 +295,7 @@ void *mm_malloc(size_t size) {
       set_allocated(bp, new_size);
       return bp;
     }
-    if(((list_node *)free_list)->next != NULL)
+    if(((list_node *)bp)->next != NULL)
       bp = ((list_node *)free_list)->next;
     else
       break;
@@ -290,11 +303,10 @@ void *mm_malloc(size_t size) {
 
 
   //extend only if we're out of room!
-  extend(new_size);
-  set_allocated(bp, new_size);
-
-
-  return bp;
+   extend(new_size);
+   void* temp = free_list;
+   set_allocated(free_list, new_size);
+   return temp;
 }
 
 
@@ -304,29 +316,29 @@ void *mm_malloc(size_t size) {
  */
 void mm_free(void *bp)
 {
-	int free_size = GET_SIZE(HDRP(bp));
-	PUT(HDRP(bp), PACK(free_size, 0));
-	PUT(FTRP(bp), PACK(free_size, 0));
-
-  //look at
-
-  list_node *new_node;
-  new_node = (bp);
-  list_node *old_node;
-  old_node = free_list;
-  //account for previous values
-  //inserts the new node in between if in the middle of list
-  if(old_node->prev != NULL)
-  {
-	  new_node->prev = old_node->prev; // sets new node to point to previous
-  	  old_node->prev->next = new_node; // sets previous to point back to new node
-  }
-  else if(old_node->prev == NULL)
-  {
-	  new_node->prev = NULL;
-  }
-  new_node->next = old_node;
-  old_node->prev = new_node;
+//	int free_size = GET_SIZE(HDRP(bp));
+//	PUT(HDRP(bp), PACK(free_size, 0));
+//	PUT(FTRP(bp), PACK(free_size, 0));
+//
+//  //look at
+//
+//  list_node *new_node;
+//  new_node = (bp);
+//  list_node *old_node;
+//  old_node = free_list;
+//  //account for previous values
+//  //inserts the new node in between if in the middle of list
+//  if(old_node->prev != NULL)
+//  {
+//	  new_node->prev = old_node->prev; // sets new node to point to previous
+//  	  old_node->prev->next = new_node; // sets previous to point back to new node
+//  }
+//  else if(old_node->prev == NULL)
+//  {
+//	  new_node->prev = NULL;
+//  }
+//  new_node->next = old_node;
+//  old_node->prev = new_node;
 
 }
 
