@@ -201,9 +201,39 @@ void set_allocated(void *bp, size_t size){
 		void* node_pointer = (char *)new_header + sizeof(block_header);
 		list_node *new_node = node_pointer;
 		list_node *old_node = bp;
+		//TODO: maybe fix list_node pointer
+		PUT(node_pointer, new_node);
 
-		new_node->next = old_node->next;
-		new_node->prev = old_node->prev;
+		//first case
+		if((old_node->prev == NULL) && (old_node->next == NULL)){
+			free_list = new_node;
+			new_node->prev = NULL;
+			new_node->next = NULL;
+		}
+
+		//second case
+		if(old_node->next != NULL && old_node->prev == NULL){
+			old_node->next->prev = new_node;
+			new_node->next = old_node->next;
+			new_node->prev = NULL;
+		}
+
+
+		//third case
+		if(old_node->next == NULL && old_node->prev != NULL){
+			old_node->prev->next = new_node;
+			new_node->prev = old_node->prev;
+			new_node->next = NULL;
+		}
+
+		//fourth case
+		if(old_node->next != NULL && old_node->prev != NULL){
+			old_node->next->prev = new_node;
+			old_node->prev->next = new_node;
+			new_node->next = old_node->next;
+			new_node->prev = old_node->prev;
+		}
+
 
 		if(bp == free_list){
 			free_list = new_node;
@@ -320,25 +350,31 @@ void mm_free(void *bp)
 //	PUT(HDRP(bp), PACK(free_size, 0));
 //	PUT(FTRP(bp), PACK(free_size, 0));
 //
-//  //look at
+//	//look at
 //
-//  list_node *new_node;
-//  new_node = (bp);
-//  list_node *old_node;
-//  old_node = free_list;
-//  //account for previous values
-//  //inserts the new node in between if in the middle of list
-//  if(old_node->prev != NULL)
-//  {
-//	  new_node->prev = old_node->prev; // sets new node to point to previous
-//  	  old_node->prev->next = new_node; // sets previous to point back to new node
-//  }
-//  else if(old_node->prev == NULL)
-//  {
-//	  new_node->prev = NULL;
-//  }
-//  new_node->next = old_node;
-//  old_node->prev = new_node;
+//	list_node *new_node;
+//	new_node = (bp);
+//	list_node *old_node;
+//	if (free_list != NULL) {
+//		PUT(bp, new_node);
+//		old_node = free_list;
+//		//account for previous values
+//		//inserts the new node in between if in the middle of list
+//		new_node->next = old_node;
+//		old_node->prev = new_node;
+//		new_node->prev = NULL;
+//
+//		free_list = new_node;
+//
+//	}
+//	else {
+//		PUT(bp, new_node);
+//
+//		new_node->prev = NULL;
+//		new_node->next = NULL;
+//		free_list = new_node;
+//
+//	}
 
 }
 
