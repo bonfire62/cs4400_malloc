@@ -92,6 +92,9 @@ typedef size_t block_footer;
  * have big enough block to allocate from
  *
  */
+
+//TODO need to have a null pointer for the explicit list to check so that it can end the while loop and extend memory
+
 void extend(size_t new_size) {
   //allocate 4 pages of requested size memory
   size_t chunk_size = CHUNK_ALIGN(new_size);
@@ -168,7 +171,6 @@ void set_allocated(void *bp, size_t size){
 	  PUT(HDRP(bp), PACK(size, 1));
 	  PUT(new_footer, PACK(size, 0));
 
-	  //TODO possibly missing update to block payload
 
 	  //update header and footer of free space
 	  PUT(new_header, PACK(free_size, 0));
@@ -302,9 +304,8 @@ void *mm_malloc(size_t size) {
  */
 void mm_free(void *bp)
 {
-	//TODO not reallocating correctly
-	int free_size = GET_SIZE(bp);
-	PUT(bp, PACK(free_size, 0));
+	int free_size = GET_SIZE(HDRP(bp));
+	PUT(HDRP(bp), PACK(free_size, 0));
 	PUT(FTRP(bp), PACK(free_size, 0));
 
   //look at
@@ -326,7 +327,7 @@ void mm_free(void *bp)
   }
   new_node->next = old_node;
   old_node->prev = new_node;
-  free_list = new_node;
+
 }
 
 
