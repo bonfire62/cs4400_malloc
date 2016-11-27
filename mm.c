@@ -71,6 +71,7 @@ void *temp_pointer;
 
 //pointer to list of free mem
 void *free_list;
+void *page_list;
 
 
 //linked list strucutre
@@ -83,7 +84,7 @@ typedef struct list_node {
 //header and footer
 typedef size_t block_header;
 typedef size_t block_footer;
-
+typedef size_t page_size;
 /*
  *
  * extend - new size: amount of memory to allocate per page
@@ -97,9 +98,31 @@ void extend(size_t new_size) {
   //allocate 4 pages of requested size memory
   size_t chunk_size = CHUNK_ALIGN(new_size);
   void *new_page = mem_map(chunk_size);
+  list_node *page_node;
+
+  PUT(new_page, page_node);
+  PUT(new_page + sizeof(list_node), chunk_size);
+
+  if(page_list == NULL)
+  {
+	  page_node = new_page;
+	  page_list = page_node;
+	  page_node->next = NULL;
+	  page_node->prev = NULL;
+
+  }
+  else
+  {
+	  page_node = new_page;
+	  page_node->next = page_list;
+	  page_node->prev = NULL;
+	  ((list_node *)page_list)->prev = page_node;
+	  page_list = page_node;
+
+  }
 
   //set first 8 bytes to null
-  void *page_pointer = (char *)new_page + 8;
+  void *page_pointer = new_page + sizeof(list_node) + sizeof(page_size);
 
   //Set prologue - 16 bytes (8 for header, 8 for footer)
   PUT(page_pointer, PACK(16,1));
@@ -124,10 +147,10 @@ void extend(size_t new_size) {
   //check if free page the first
   if(free_list != NULL)
   {
-		if(((list_node *)free_list)->prev == NULL){
-			 list->next = free_list;
-			 ((list_node *)free_list)->prev = list;
-		}
+
+	  list->next = free_list;
+	  ((list_node *)free_list)->prev = list;
+
   }
   else
   {
@@ -141,7 +164,7 @@ void extend(size_t new_size) {
   free_list = list;
 
   //move page pointer to page terminator
-  page_pointer = (char *)page_pointer + free_space;
+  page_pointer = (char *)page_pointer + free_space - sizeof(block_footer);
 
   //end page with 0
   PUT(page_pointer, PACK(0,1));
@@ -234,10 +257,6 @@ void set_allocated(void *bp, size_t size){
 			new_node->prev = old_node->prev;
 		}
 
-
-		if(bp == free_list){
-			free_list = new_node;
-		}
 		temp_pointer = bp;
 	}
 }
@@ -295,6 +314,21 @@ void *coalesce(void *bp) {
 int mm_init(void) {
   //reset implementation
   free_list = NULL;
+
+  list_node * pl = ((list_node *)page_list);
+  list_node *next_node;
+
+  if (pl != NULL)
+  {
+	  while(pl->next != NULL)
+	  {
+		  next_node = pl->next;
+		  mem_unmap(pl, GET(pl+sizeof(list_node)) );
+		  pl = next_node;
+	  }
+  }
+
+  page_list = NULL;
 
   //allocate initial heap area
   extend(mem_pagesize());
