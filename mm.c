@@ -68,10 +68,6 @@ void set_allocated(void *bp, size_t size);
 void *coalesce(void *bp);
 void *temp_pointer;
 
-
-
-
-
 //linked list strucutre
 typedef struct list_node {
 	struct list_node *prev;
@@ -114,6 +110,8 @@ void extend(size_t new_size) {
 
   PUT(new_page, new_page_node);
 
+  int x;
+  x = sizeof(new_page_node);
   if(page_list == NULL)
   {
 	  page_node *page_list = new_page_node;
@@ -123,7 +121,7 @@ void extend(size_t new_size) {
 
 
   //set first 8 bytes to null
-  void *page_pointer = new_page + sizeof(list_node) + sizeof(page_size);
+  void *page_pointer = new_page + sizeof(new_page_node);
 
   //Set prologue - 16 bytes (8 for header, 8 for footer)
   PUT(page_pointer, PACK(16,1));
@@ -229,18 +227,23 @@ void set_allocated(void *bp, size_t size){
 
 		//first case
 
-			free_list = new_node;
-			new_node->prev = old_node->prev;
-			new_node->next = old_node->next;
+		free_list = new_node;
+		new_node->prev = old_node->prev;
+		new_node->next = old_node->next;
 
-			if(old_node->next != NULL)
-			{
-				old_node->next->prev = new_node;
-			}
-			if(old_node->prev != NULL)
-			{
-				old_node->prev->next = new_node;
-			}
+		if(old_node->next != NULL)
+		{
+			old_node->next->prev = new_node;
+		}
+		if(old_node->prev != NULL)
+		{
+			old_node->prev->next = new_node;
+		}
+
+		//test get old header and footer
+		size_t z;
+
+		z = GET_SIZE(HDRP(PREV_BLKP(old_node)));
 
 
 
@@ -251,8 +254,8 @@ void set_allocated(void *bp, size_t size){
 
 
 
-void *coalesce(void *bp) {
-
+//void *coalesce(void *bp) {
+//
 //	//TODO check either direction. if 0, set that
 //	void* test;
 //	test = NEXT_BLKP((HDRP(bp)));
@@ -277,7 +280,13 @@ void *coalesce(void *bp) {
 //   PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
 // }
 // else if (!prev_alloc && next_alloc) {
-//   size += GET_SIZE(HDRP(PREV_BLKP(bp)));
+//	 size_t s;
+//	 void* block;
+//	 void* header;
+//	 block = PREV_BLKP(bp);
+//	 header = HDRP(block);
+//	 s = (*(size_t *)header) & ~0xf;
+//   size += s;
 //   PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
 //   PUT(FTRP(bp), PACK(size, 0));
 //   bp = PREV_BLKP(bp);
@@ -291,7 +300,7 @@ void *coalesce(void *bp) {
 // }
 //
 //  return bp;
-}
+//}
 
 
 /*
@@ -325,17 +334,16 @@ int mm_init(void) {
 void *mm_malloc(size_t size) {
   //int need_size = max(size, sizeof(list_node));
   int new_size = ALIGN(size + OVERHEAD);
-  list_node *bp = free_list;
+  void *bp = free_list;
+
 
   //first fit
   while(GET_SIZE(HDRP(bp)) != 0)  {
 	  //for debugging
-	  int x;
-	  x = GET_ALLOC(HDRP(bp));
-	  int z;
-	  z = GET_SIZE(HDRP(bp));
-	  //
+
     if(!GET_ALLOC(HDRP(bp)) && (GET_SIZE(HDRP(bp)) >= new_size)){
+    	  int x;
+    	  x = GET_SIZE(HDRP(bp));
       set_allocated(bp, new_size);
       return bp;
     }
