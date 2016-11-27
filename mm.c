@@ -69,9 +69,7 @@ void *coalesce(void *bp);
 void *temp_pointer;
 
 
-//pointer to list of free mem
-void *free_list;
-void *page_list;
+
 
 
 //linked list strucutre
@@ -80,11 +78,22 @@ typedef struct list_node {
 	struct list_node *next;
 } list_node;
 
+typedef struct page_node {
+	struct page_node *prev;
+	struct page_node *next;
+	size_t size;
+} page_node;
+
 
 //header and footer
 typedef size_t block_header;
 typedef size_t block_footer;
 typedef size_t page_size;
+
+//pointer to list of free mem
+list_node *free_list;
+void *page_list;
+
 /*
  *
  * extend - new size: amount of memory to allocate per page
@@ -95,31 +104,23 @@ typedef size_t page_size;
 //TODO need to have a null pointer for the explicit list to check so that it can end the while loop and extend memory
 
 void extend(size_t new_size) {
-  //allocate 4 pages of requested size memory
+  //allocate 4 pages of requested size 	memory
   size_t chunk_size = CHUNK_ALIGN(new_size);
   void *new_page = mem_map(chunk_size);
-  list_node *page_node;
+  page_node *new_page_node;
+  new_page_node = new_page;
 
-  PUT(new_page, page_node);
   PUT(new_page + sizeof(list_node), chunk_size);
+
+  PUT(new_page, new_page_node);
 
   if(page_list == NULL)
   {
-	  page_node = new_page;
-	  page_list = page_node;
-	  page_node->next = NULL;
-	  page_node->prev = NULL;
-
+	  page_node *page_list = new_page_node;
+	  new_page_node->next = NULL;
+	  new_page_node->prev = NULL;
   }
-  else
-  {
-	  page_node = new_page;
-	  page_node->next = page_list;
-	  page_node->prev = NULL;
-	  ((list_node *)page_list)->prev = page_node;
-	  page_list = page_node;
 
-  }
 
   //set first 8 bytes to null
   void *page_pointer = new_page + sizeof(list_node) + sizeof(page_size);
@@ -143,7 +144,6 @@ void extend(size_t new_size) {
 
   //update list_node
   list_node *list = page_pointer;
-  PUT(page_pointer, list);
   //check if free page the first
   if(free_list != NULL)
   {
@@ -228,34 +228,21 @@ void set_allocated(void *bp, size_t size){
 		PUT(node_pointer, new_node);
 
 		//first case
-		if((old_node->prev == NULL) && (old_node->next == NULL)){
+
 			free_list = new_node;
-			new_node->prev = NULL;
-			new_node->next = NULL;
-		}
-
-		//second case
-		if(old_node->next != NULL && old_node->prev == NULL){
-			old_node->next->prev = new_node;
-			new_node->next = old_node->next;
-			new_node->prev = NULL;
-		}
-
-
-		//third case
-		if(old_node->next == NULL && old_node->prev != NULL){
-			old_node->prev->next = new_node;
 			new_node->prev = old_node->prev;
-			new_node->next = NULL;
-		}
-
-		//fourth case
-		if(old_node->next != NULL && old_node->prev != NULL){
-			old_node->next->prev = new_node;
-			old_node->prev->next = new_node;
 			new_node->next = old_node->next;
-			new_node->prev = old_node->prev;
-		}
+
+			if(old_node->next != NULL)
+			{
+				old_node->next->prev = new_node;
+			}
+			if(old_node->prev != NULL)
+			{
+				old_node->prev->next = new_node;
+			}
+
+
 
 		temp_pointer = bp;
 	}
@@ -266,42 +253,44 @@ void set_allocated(void *bp, size_t size){
 
 void *coalesce(void *bp) {
 
-	//TODO check either direction. if 0, set that
-  /* size_t prev_alloc = GET_ALLOC(HDRP(PREV_BLKP(bp)));
-  size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
-  size_t size = GET_SIZE(HDRP(bp));
-
-  if(prev_alloc && next_alloc){
-    //add_to_free_list((list_node *)bp);
-  }
-
-
-  else if(prev_alloc && !next_alloc){
-    size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
-    GET_SIZE(HDRP(bp)) = size;
-    GET_SIZE(FTRP(bp)) = size;
-  }
-
-
-  else if (!prev_alloc && next_alloc) {
-    size += GET_SIZE(HDRP(PREV_BLKP(bp)));
-    GET_SIZE(FTRP(bp)) = size;
-    GET_SIZE(HDRP(PREV_BLKP(bp))) = size;
-    bp = PREV_BLKP(bp);
-  }
-
-
-  else {
-    size += (GET_SIZE(HDRP(PREV_BLKP(bp)))
-    + GET_SIZE(HDRP(NEXT_BLKP(bp))));
-    GET_SIZE(HDRP(PREV_BLKP(bp))) = size;
-    GET_SIZE(FTRP(NEXT_BLKP(bp))) = size;
-    bp = PREV_BLKP(bp);
-  }
-  */
-
-
-  return bp;
+//	//TODO check either direction. if 0, set that
+//	void* test;
+//	test = NEXT_BLKP((HDRP(bp)));
+//	int next_alloc;
+//	next_alloc = GET_ALLOC(test);
+//
+//	test = PREV_BLKP((HDRP(bp)));
+//	int prev_alloc;
+//	prev_alloc = GET_ALLOC(test);
+//
+//
+//  size_t size = GET_SIZE(HDRP(bp));
+//
+//
+//  if(prev_alloc && next_alloc){
+//   //do nothing
+//
+// }
+// else if(prev_alloc && !next_alloc){
+//   size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
+//   PUT(HDRP(bp), PACK(size, 0));
+//   PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
+// }
+// else if (!prev_alloc && next_alloc) {
+//   size += GET_SIZE(HDRP(PREV_BLKP(bp)));
+//   PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+//   PUT(FTRP(bp), PACK(size, 0));
+//   bp = PREV_BLKP(bp);
+// }
+//
+// else {
+//   size += (GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(HDRP(NEXT_BLKP(bp))));
+//   PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+//   PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
+//   bp = PREV_BLKP(bp);
+// }
+//
+//  return bp;
 }
 
 
@@ -313,22 +302,13 @@ void *coalesce(void *bp) {
  */
 int mm_init(void) {
   //reset implementation
-  free_list = NULL;
-
-  list_node * pl = ((list_node *)page_list);
-  list_node *next_node;
-
-  if (pl != NULL)
-  {
-	  while(pl->next != NULL)
-	  {
-		  next_node = pl->next;
-		  mem_unmap(pl, GET(pl+sizeof(list_node)) );
-		  pl = next_node;
-	  }
-  }
-
-  page_list = NULL;
+	free_list = NULL;
+	page_node *newnode;
+//	if(page_list != NULL)
+//	{
+//
+//
+//	}
 
   //allocate initial heap area
   extend(mem_pagesize());
@@ -345,7 +325,7 @@ int mm_init(void) {
 void *mm_malloc(size_t size) {
   //int need_size = max(size, sizeof(list_node));
   int new_size = ALIGN(size + OVERHEAD);
-  void *bp = free_list;
+  list_node *bp = free_list;
 
   //first fit
   while(GET_SIZE(HDRP(bp)) != 0)  {
@@ -360,7 +340,7 @@ void *mm_malloc(size_t size) {
       return bp;
     }
     if(((list_node *)bp)->next != NULL)
-      bp = ((list_node *)free_list)->next;
+      bp = ((list_node *)bp)->next;
     else
       break;
   }
@@ -380,36 +360,40 @@ void *mm_malloc(size_t size) {
  */
 void mm_free(void *bp)
 {
-//	int free_size = GET_SIZE(HDRP(bp));
-//	PUT(HDRP(bp), PACK(free_size, 0));
-//	PUT(FTRP(bp), PACK(free_size, 0));
-//
-//	//look at
-//
-//	list_node *new_node;
-//	new_node = (bp);
-//	list_node *old_node;
-//	if (free_list != NULL) {
-//		PUT(bp, new_node);
-//		old_node = free_list;
-//		//account for previous values
-//		//inserts the new node in between if in the middle of list
-//		new_node->next = old_node;
-//		old_node->prev = new_node;
-//		new_node->prev = NULL;
-//
-//		free_list = new_node;
-//
-//	}
-//	else {
-//		PUT(bp, new_node);
-//
-//		new_node->prev = NULL;
-//		new_node->next = NULL;
-//		free_list = new_node;
-//
-//	}
+	list_node * test = bp;
+	int free_size = GET_SIZE(HDRP(bp));
+	PUT(HDRP(bp), PACK(free_size, 0));
+	PUT(FTRP(bp), PACK(free_size, 0));
 
+	//look at
+
+	list_node *new_node;
+	new_node = (bp);
+	list_node *old_node;
+	if (free_list != NULL) {
+//		PUT(bp, new_node);
+		old_node = free_list;
+		//account for previous values
+		//inserts the new node in between if in the middle of list
+		new_node->next = old_node;
+		old_node->prev = new_node;
+		new_node->prev = NULL;
+
+		free_list = new_node;
+
+	}
+	else {
+//		PUT(bp, new_node);
+
+		new_node->prev = NULL;
+		new_node->next = NULL;
+		free_list = new_node;
+
+	}
+//	void* returnfree;
+//	coalesce(bp);
+//
+//
 }
 
 
